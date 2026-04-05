@@ -3,6 +3,7 @@ import {
   SignUpCommand,
   InitiateAuthCommand,
   GlobalSignOutCommand,
+  ConfirmSignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { AWS_REGION, COGNITO_CLIENT_ID } from "./config";
 
@@ -26,6 +27,18 @@ export async function registerUser(email: string, password: string) {
     ],
   });
 
+  return cognitoClient.send(command);
+}
+
+/**
+ * Confirms a newly registered user with the code sent to their email.
+ */
+export async function confirmUser(email: string, code: string) {
+  const command = new ConfirmSignUpCommand({
+    ClientId: COGNITO_CLIENT_ID,
+    Username: email,
+    ConfirmationCode: code,
+  });
   return cognitoClient.send(command);
 }
 

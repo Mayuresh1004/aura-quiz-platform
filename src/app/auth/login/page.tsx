@@ -4,10 +4,37 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { Cloud, ArrowRight, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { handleLogin } from "@/actions/server-actions";
+import { useAuth } from "@/lib/auth-context";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("STUDENT");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { login } = useAuth();
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const formData = new FormData();
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("role", role);
+
+    const res = await handleLogin(formData);
+    if (res.success) {
+      if(res.token && res.user) {
+        login(res.token, { email: res.user.email, role: res.user.role as "TEACHER" | "STUDENT" });
+        window.location.href = res.user.role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard";
+      }
+    } else {
+      setError(res.error || "Failed to login");
+    }
+    setLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden px-4">
@@ -33,7 +60,41 @@ export default function Login() {
             <p className="text-slate-400">Log in to view your quizzes and analytics.</p>
           </div>
 
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-sm text-center">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-6" onSubmit={onSubmit}>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">I am logging in as a...</label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setRole("STUDENT")}
+                  className={`py-3 rounded-xl border-2 font-medium transition-all ${
+                    role === "STUDENT"
+                      ? "border-sky-500 bg-sky-500/10 text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)]"
+                      : "border-slate-800 bg-slate-900/50 text-slate-500 hover:border-slate-700"
+                  }`}
+                >
+                  Student
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("TEACHER")}
+                  className={`py-3 rounded-xl border-2 font-medium transition-all ${
+                    role === "TEACHER"
+                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
+                      : "border-slate-800 bg-slate-900/50 text-slate-500 hover:border-slate-700"
+                  }`}
+                >
+                  Teacher
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
               <input
@@ -59,9 +120,10 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 bg-sky-500 text-white py-3 rounded-xl font-bold hover:bg-sky-400 transition-colors shadow-lg shadow-sky-500/20"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-sky-500 text-white py-3 rounded-xl font-bold hover:bg-sky-400 transition-colors shadow-lg shadow-sky-500/20 disabled:opacity-50"
             >
-              Sign in
+              {loading ? "Signing in..." : "Sign in"}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
