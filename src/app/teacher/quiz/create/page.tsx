@@ -51,12 +51,21 @@ export default function CreateQuiz() {
     e.preventDefault();
     setLoading(true);
 
-    const result = await handleCreateQuiz({
-      title,
-      subject,
-      timeLimitMinutes: timeLimit,
-      questions,
-    });
+    // Read the Cognito access token saved at login so the server action
+    // can resolve the real teacher ID from the JWT.
+    const accessToken = typeof window !== "undefined"
+      ? localStorage.getItem("aura_token") ?? undefined
+      : undefined;
+
+    const result = await handleCreateQuiz(
+      {
+        title,
+        subject,
+        timeLimitMinutes: timeLimit,
+        questions,
+      },
+      accessToken
+    );
 
     if (result.success) {
       alert("Quiz successfully saved to DynamoDB!");
