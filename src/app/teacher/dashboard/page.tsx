@@ -29,7 +29,7 @@ export default function TeacherDashboard() {
       setIsLoading(true);
       setError("");
       const token =
-        typeof window !== "undefined" ? localStorage.getItem("aura_token") ?? undefined : undefined;
+        typeof window !== "undefined" ? localStorage.getItem("quickquiz_token") ?? undefined : undefined;
 
       const result = await handleGetTeacherDashboardData(token);
       if (!result.success) {

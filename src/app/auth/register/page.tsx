@@ -65,7 +65,7 @@ export default function Register() {
         <div className="flex justify-center mb-8">
           <Link href="/" className="flex items-center gap-2">
             <Cloud className="w-10 h-10 text-sky-400" />
-            <span className="text-3xl font-bold text-white tracking-tight">Aura</span>
+            <span className="text-3xl font-bold text-white tracking-tight">QuickQuiz</span>
           </Link>
         </div>
 

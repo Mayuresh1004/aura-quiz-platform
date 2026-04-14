@@ -37,7 +37,7 @@ export default function LandingPage() {
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
           <Cloud className="w-8 h-8 text-sky-400" />
-          <span className="text-xl font-bold tracking-tight text-white">Aura</span>
+          <span className="text-xl font-bold tracking-tight text-white">QuickQuiz</span>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/auth/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">
@@ -82,7 +82,7 @@ export default function LandingPage() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="max-w-2xl mx-auto text-lg text-slate-400 mb-10"
         >
-          Aura empowers educators to create secure, scalable quizzes while leveraging AI to automatically estimate
+          QuickQuiz empowers educators to create secure, scalable quizzes while leveraging AI to automatically estimate
           question difficulty based on student performance metrics.
         </motion.p>
 

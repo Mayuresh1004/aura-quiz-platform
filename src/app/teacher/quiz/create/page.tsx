@@ -54,7 +54,7 @@ export default function CreateQuiz() {
     // Read the Cognito access token saved at login so the server action
     // can resolve the real teacher ID from the JWT.
     const accessToken = typeof window !== "undefined"
-      ? localStorage.getItem("aura_token") ?? undefined
+      ? localStorage.getItem("quickquiz_token") ?? undefined
       : undefined;
 
     const result = await handleCreateQuiz(

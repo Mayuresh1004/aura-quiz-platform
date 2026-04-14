@@ -6,7 +6,7 @@ import { AuthProvider } from "@/lib/auth-context";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Aura - Cloud Quiz Platform",
+  title: "QuickQuiz - Cloud Quiz Platform",
   description: "Secure Cloud-Based Quiz and Performance Analytics Platform powered by AWS and AI.",
 };
 

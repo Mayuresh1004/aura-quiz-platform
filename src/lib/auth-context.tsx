@@ -36,7 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // On mount, check if user session exists in localStorage (or via Cognito refresh token)
-    const storedUser = localStorage.getItem("aura_user");
+    const storedUser =
+      localStorage.getItem("quickquiz_user") || localStorage.getItem("aura_user");
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
@@ -54,12 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...userData,
       id: userData.id || tokenUserId,
     };
-    localStorage.setItem("aura_token", token);
-    localStorage.setItem("aura_user", JSON.stringify(resolvedUser));
+    localStorage.setItem("quickquiz_token", token);
+    localStorage.setItem("quickquiz_user", JSON.stringify(resolvedUser));
     setUser(resolvedUser);
   };
 
   const logout = () => {
+    localStorage.removeItem("quickquiz_token");
+    localStorage.removeItem("quickquiz_user");
+    // Cleanup legacy keys after brand rename.
     localStorage.removeItem("aura_token");
     localStorage.removeItem("aura_user");
     setUser(null);
