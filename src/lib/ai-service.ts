@@ -11,7 +11,8 @@ const sagemakerClient = new SageMakerRuntimeClient({
   region: AWS_REGION,
 });
 
-const SAGEMAKER_ENDPOINT_NAME = process.env.SAGEMAKER_ENDPOINT_NAME || "Aura-Difficulty-Estimator-v1";
+const SAGEMAKER_ENDPOINT_NAME = (process.env.SAGEMAKER_ENDPOINT_NAME || "").trim();
+const ENABLE_SAGEMAKER = (process.env.ENABLE_SAGEMAKER || "").trim() === "true";
 
 /**
  * Triggers the AI Model hosted on SageMaker to recalculate question difficulties
@@ -25,6 +26,13 @@ export async function estimateQuestionDifficulty(
   questionId: string,
   successRate: number
 ): Promise<Difficulty> {
+  // Default local estimator for MVP mode (no SageMaker requirement).
+  if (!ENABLE_SAGEMAKER || !SAGEMAKER_ENDPOINT_NAME) {
+    if (successRate > 0.75) return "EASY";
+    if (successRate > 0.40) return "MEDIUM";
+    return "HARD";
+  }
+
   const payload = {
     question_id: questionId,
     success_rate: successRate,
@@ -45,9 +53,7 @@ export async function estimateQuestionDifficulty(
     }
 
     throw new Error("Empty response from SageMaker");
-  } catch (error) {
-    console.error("SageMaker Invocation Error:", error);
-    
+  } catch {
     // Fallback logic if SageMaker is unavailable or rate limited (Free Tier safety)
     if (successRate > 0.75) return "EASY";
     if (successRate > 0.40) return "MEDIUM";

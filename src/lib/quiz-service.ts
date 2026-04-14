@@ -140,3 +140,23 @@ export async function saveAttempt(attempt: Attempt) {
     })
   );
 }
+
+export async function updateAttemptFeedback(
+  studentPk: string,
+  attemptSk: string,
+  aiFeedback: string
+) {
+  return dynamo.send(
+    new UpdateCommand({
+      TableName: DYNAMO_TABLE_NAME,
+      Key: {
+        PK: studentPk,
+        SK: attemptSk,
+      },
+      UpdateExpression: "SET aiFeedback = :feedback",
+      ExpressionAttributeValues: {
+        ":feedback": aiFeedback,
+      },
+    })
+  );
+}

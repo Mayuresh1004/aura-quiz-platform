@@ -39,4 +39,5 @@ export interface Attempt {
   totalQuestions: number;
   responses: number[]; // Index of the option selected for each question
   completedAt: string;
+  aiFeedback?: string;
 }

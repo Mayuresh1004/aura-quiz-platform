@@ -4,6 +4,7 @@ import { registerUser, loginUser, confirmUser } from "../lib/auth-service";
 import {
   saveQuiz,
   saveAttempt,
+  updateAttemptFeedback,
   getQuiz,
   listQuizzes,
   listAllAttempts,
@@ -11,6 +12,7 @@ import {
   updateQuizQuestionDifficulties,
 } from "../lib/quiz-service";
 import { estimateQuestionDifficulty } from "../lib/ai-service";
+import { generateAttemptFeedback } from "../lib/gemini-feedback-service";
 import { Quiz, Attempt, User, Question } from "../models/DatabaseInterfaces";
 import { v4 as uuidv4 } from "uuid";
 import { dynamo } from "../lib/dynamo";
@@ -167,10 +169,11 @@ export async function handleQuizSubmission(attempt: Attempt) {
     // 2. Fetch the original quiz to access each question's ID and metadata.
     const quizId = attempt.quizId;
     const quiz = await getQuiz(quizId);
+    let aiFeedback = "";
 
     if (!quiz || quiz.questions.length === 0) {
       // Attempt saved; skip AI update if quiz metadata is unavailable.
-      return { success: true };
+      return { success: true, feedback: aiFeedback };
     }
 
     // 3. AI Difficulty Estimation Loop:
@@ -201,7 +204,13 @@ export async function handleQuizSubmission(attempt: Attempt) {
     // 4. Write the AI-updated difficulty tags back to DynamoDB.
     await updateQuizQuestionDifficulties(quizId, updatedQuestions);
 
-    return { success: true };
+    // 5. Generate student feedback via Gemini (with local fallback) and persist.
+    aiFeedback = await generateAttemptFeedback(quiz, attempt);
+    if (aiFeedback) {
+      await updateAttemptFeedback(attempt.PK, attempt.SK, aiFeedback);
+    }
+
+    return { success: true, feedback: aiFeedback };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

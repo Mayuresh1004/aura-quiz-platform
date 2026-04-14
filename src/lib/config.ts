@@ -46,5 +46,8 @@ export const DYNAMO_TABLE_NAME =
 // User pool ID is not required for the current sign-up/sign-in API flow.
 export const COGNITO_USER_POOL_ID = readEnv("COGNITO_USER_POOL_ID");
 export const COGNITO_CLIENT_ID = readEnv("COGNITO_CLIENT_ID");
+export const GEMINI_API_KEY = readEnv("GEMINI_API_KEY");
+export const GEMINI_MODEL =
+  readEnv("GEMINI_MODEL") || "gemini-1.5-flash";
 
 export const S3_BUCKET_NAME = readEnv("S3_BUCKET_NAME") || "aura-quiz-assets";

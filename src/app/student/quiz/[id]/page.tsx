@@ -24,6 +24,7 @@ export default function QuizAttempt() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState("");
 
   // Fetch quiz from DynamoDB on mount
   useEffect(() => {
@@ -95,7 +96,10 @@ export default function QuizAttempt() {
       completedAt: new Date().toISOString(),
     };
 
-    await handleQuizSubmission(attempt);
+    const result = await handleQuizSubmission(attempt);
+    if (result.success && result.feedback) {
+      setAiFeedback(result.feedback);
+    }
     setIsSubmitting(false);
   };
 
@@ -157,6 +161,15 @@ export default function QuizAttempt() {
               {score} out of {quiz.questions.length} correct
             </p>
           </div>
+
+          {!!aiFeedback && (
+            <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl mb-8 text-left">
+              <p className="text-xs uppercase tracking-wider text-sky-400 mb-2">
+                AI Feedback
+              </p>
+              <p className="text-sm text-slate-300 leading-relaxed">{aiFeedback}</p>
+            </div>
+          )}
 
           <Link
             href="/student/dashboard"
