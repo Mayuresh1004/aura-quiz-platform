@@ -22,8 +22,8 @@ export default function StudentDashboard() {
       setIsLoading(true);
       const [quizzesResult, attemptsResult] = await Promise.all([
         handleListQuizzes(),
-        user?.email
-          ? handleListStudentAttempts(user.email)
+        user?.id
+          ? handleListStudentAttempts(user.id)
           : Promise.resolve({ success: true, attempts: [] }),
       ]);
 

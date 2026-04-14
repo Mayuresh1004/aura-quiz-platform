@@ -79,7 +79,12 @@ export default function QuizAttempt() {
     setScore(correct);
 
     // Persist to DynamoDB and trigger SageMaker AI difficulty update
-    const studentId = user?.email ?? "anonymous";
+    const studentId = user?.id;
+    if (!studentId) {
+      setIsSubmitting(false);
+      setQuizError("Session expired. Please log in again.");
+      return;
+    }
     const attempt = {
       PK: `USER#${studentId}`,
       SK: `ATTEMPT#${quizId}#${new Date().toISOString()}`,

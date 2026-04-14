@@ -75,6 +75,23 @@ export async function listAttemptsByStudent(studentId: string): Promise<Attempt[
 }
 
 /**
+ * Lists all attempt records in the table.
+ * Used for teacher analytics dashboards.
+ */
+export async function listAllAttempts(): Promise<Attempt[]> {
+  const response = await dynamo.send(
+    new ScanCommand({
+      TableName: DYNAMO_TABLE_NAME,
+      FilterExpression: "begins_with(SK, :attemptPrefix)",
+      ExpressionAttributeValues: {
+        ":attemptPrefix": "ATTEMPT#",
+      },
+    })
+  );
+  return (response.Items as Attempt[]) || [];
+}
+
+/**
  * Updates the difficulty tags on each question in a quiz after AI estimation.
  * Persists the updated questions array back to DynamoDB.
  */

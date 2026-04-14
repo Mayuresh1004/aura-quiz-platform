@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { Role } from "../models/DatabaseInterfaces";
 
 interface User {
+  id?: string;
   email: string;
   role: Role;
   name?: string;
@@ -18,6 +19,16 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function extractUserIdFromToken(token: string): string | undefined {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.sub as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -38,9 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (token: string, userData: User) => {
     // In a real app we'd also store the token securely, e.g., HTTP-only cookie
+    const tokenUserId = extractUserIdFromToken(token);
+    const resolvedUser = {
+      ...userData,
+      id: userData.id || tokenUserId,
+    };
     localStorage.setItem("aura_token", token);
-    localStorage.setItem("aura_user", JSON.stringify(userData));
-    setUser(userData);
+    localStorage.setItem("aura_user", JSON.stringify(resolvedUser));
+    setUser(resolvedUser);
   };
 
   const logout = () => {

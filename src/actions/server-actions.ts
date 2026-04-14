@@ -6,6 +6,7 @@ import {
   saveAttempt,
   getQuiz,
   listQuizzes,
+  listAllAttempts,
   listAttemptsByStudent,
   updateQuizQuestionDifficulties,
 } from "../lib/quiz-service";
@@ -26,7 +27,7 @@ function extractUserIdFromToken(token: string): string {
     const decoded = JSON.parse(Buffer.from(payload, "base64").toString("utf-8"));
     return decoded.sub as string;
   } catch {
-    return uuidv4(); // Fallback for degenerate token formats
+    return "";
   }
 }
 
@@ -43,27 +44,47 @@ export async function handleRegister(formData: FormData) {
     const cognitoResult = await registerUser(email, password);
 
     // Persist user metadata (including role) in DynamoDB immediately after Cognito signup.
-    // The Cognito sub is used as the canonical user ID across the platform.
-    const userId = cognitoResult.UserSub || uuidv4();
-    const userRecord: User = {
-      PK: `USER#${userId}`,
-      SK: "METADATA",
-      email,
-      role: role as User["role"],
-      name: email.split("@")[0], // Default display name from email prefix
-      createdAt: new Date().toISOString(),
-    };
+    // If this secondary write fails, keep the Cognito signup successful so the user can verify.
+    try {
+      const userId = cognitoResult.UserSub || uuidv4();
+      const userRecord: User = {
+        PK: `USER#${userId}`,
+        SK: "METADATA",
+        email,
+        role: role as User["role"],
+        name: email.split("@")[0], // Default display name from email prefix
+        createdAt: new Date().toISOString(),
+      };
 
-    await dynamo.send(
-      new PutCommand({
-        TableName: DYNAMO_TABLE_NAME,
-        Item: userRecord,
-      })
-    );
+      await dynamo.send(
+        new PutCommand({
+          TableName: DYNAMO_TABLE_NAME,
+          Item: userRecord,
+        })
+      );
+    } catch (dbErr: any) {
+      console.error("Dynamo write failed after Cognito signup:", dbErr);
+      return {
+        success: true,
+        warning:
+          "Account created in Cognito, but profile write to DynamoDB failed. Please verify your account and then fix DynamoDB IAM/table schema.",
+      };
+    }
 
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    // If the user already exists in Cognito, allow them to move to verification flow.
+    if (err?.name === "UsernameExistsException") {
+      return {
+        success: true,
+        warning:
+          "User already exists. If not verified yet, please enter the verification code sent to your email.",
+      };
+    }
+
+    const details = [err?.name, err?.message].filter(Boolean).join(": ");
+    console.error("Register failed:", err);
+    return { success: false, error: details || "Registration failed." };
   }
 }
 
@@ -105,11 +126,14 @@ export async function handleCreateQuiz(
   accessToken?: string
 ) {
   try {
-    // Resolve the real teacher ID from the Cognito access token if available,
-    // falling back to a placeholder for development without live AWS credentials.
-    const teacherUserId = accessToken
-      ? extractUserIdFromToken(accessToken)
-      : "DEMO_TEACHER";
+    if (!accessToken) {
+      return { success: false, error: "Authentication required to create quizzes." };
+    }
+
+    const teacherUserId = extractUserIdFromToken(accessToken);
+    if (!teacherUserId) {
+      return { success: false, error: "Invalid access token." };
+    }
 
     const newQuiz: Quiz = {
       PK: `QUIZ#${uuidv4()}`,
@@ -220,5 +244,120 @@ export async function handleListStudentAttempts(studentId: string) {
     return { success: true, attempts };
   } catch (err: any) {
     return { success: false, attempts: [], error: err.message };
+  }
+}
+
+/**
+ * Computes teacher dashboard analytics from live DynamoDB quiz/attempt data.
+ */
+export async function handleGetTeacherDashboardData(accessToken?: string) {
+  try {
+    if (!accessToken) {
+      return {
+        success: false,
+        error: "Authentication required.",
+        quizzes: [],
+        scoreLabels: [],
+        scoreData: [],
+        trendLabels: [],
+        easyData: [],
+        mediumData: [],
+        hardData: [],
+        stats: { totalStudents: 0, activeQuizzes: 0, aiCalibrations: 0 },
+      };
+    }
+
+    const teacherId = extractUserIdFromToken(accessToken);
+    const allQuizzes = await listQuizzes();
+    const teacherQuizzes = allQuizzes.filter(
+      (quiz) => quiz.teacherId === `USER#${teacherId}`
+    );
+
+    const allAttempts = await listAllAttempts();
+    const teacherQuizIds = new Set(teacherQuizzes.map((q) => q.PK.split("#")[1]));
+    const attempts = allAttempts.filter((a) => teacherQuizIds.has(a.quizId));
+
+    const scoreBuckets = [0, 0, 0, 0, 0];
+    for (const attempt of attempts) {
+      if (!attempt.totalQuestions) continue;
+      const percent = Math.round((attempt.score / attempt.totalQuestions) * 100);
+      if (percent <= 20) scoreBuckets[0]++;
+      else if (percent <= 40) scoreBuckets[1]++;
+      else if (percent <= 60) scoreBuckets[2]++;
+      else if (percent <= 80) scoreBuckets[3]++;
+      else scoreBuckets[4]++;
+    }
+
+    const latestQuizzes = [...teacherQuizzes]
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .slice(0, 5)
+      .reverse();
+
+    const trendLabels = latestQuizzes.map(
+      (q, idx) => q.title || `Quiz ${idx + 1}`
+    );
+
+    const easyData = latestQuizzes.map((q) =>
+      q.questions.length
+        ? Math.round(
+            (q.questions.filter((ques) => ques.difficulty === "EASY").length /
+              q.questions.length) *
+              100
+          )
+        : 0
+    );
+    const mediumData = latestQuizzes.map((q) =>
+      q.questions.length
+        ? Math.round(
+            (q.questions.filter((ques) => ques.difficulty === "MEDIUM").length /
+              q.questions.length) *
+              100
+          )
+        : 0
+    );
+    const hardData = latestQuizzes.map((q) =>
+      q.questions.length
+        ? Math.round(
+            (q.questions.filter((ques) => ques.difficulty === "HARD").length /
+              q.questions.length) *
+              100
+          )
+        : 0
+    );
+
+    const uniqueStudents = new Set(attempts.map((a) => a.PK));
+    const aiCalibrations = attempts.reduce(
+      (sum, attempt) => sum + (attempt.totalQuestions || 0),
+      0
+    );
+
+    return {
+      success: true,
+      quizzes: teacherQuizzes.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+      scoreLabels: ["0-20%", "21-40%", "41-60%", "61-80%", "81-100%"],
+      scoreData: scoreBuckets,
+      trendLabels,
+      easyData,
+      mediumData,
+      hardData,
+      stats: {
+        totalStudents: uniqueStudents.size,
+        activeQuizzes: teacherQuizzes.length,
+        aiCalibrations,
+      },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message,
+      quizzes: [],
+      scoreLabels: [],
+      scoreData: [],
+      trendLabels: [],
+      easyData: [],
+      mediumData: [],
+      hardData: [],
+      stats: { totalStudents: 0, activeQuizzes: 0, aiCalibrations: 0 },
+    };
   }
 }

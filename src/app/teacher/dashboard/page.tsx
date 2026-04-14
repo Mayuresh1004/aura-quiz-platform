@@ -1,19 +1,54 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Plus, Users, BrainCircuit, Activity } from "lucide-react";
+import { Plus, Users, BrainCircuit, Activity, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ScoreDistributionChart, DifficultyTrendLine } from "@/components/AnalyticsCharts";
+import { handleGetTeacherDashboardData } from "@/actions/server-actions";
+import { Quiz } from "@/models/DatabaseInterfaces";
 
 export default function TeacherDashboard() {
-  // Mock data for demonstration of Chart.js & Analytics
-  const scoreLabels = ["0-20%", "21-40%", "41-60%", "61-80%", "81-100%"];
-  const scoreData = [2, 5, 12, 28, 15]; // Number of students in each bucket
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [scoreLabels, setScoreLabels] = useState<string[]>([]);
+  const [scoreData, setScoreData] = useState<number[]>([]);
+  const [trendLabels, setTrendLabels] = useState<string[]>([]);
+  const [easyData, setEasyData] = useState<number[]>([]);
+  const [mediumData, setMediumData] = useState<number[]>([]);
+  const [hardData, setHardData] = useState<number[]>([]);
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    activeQuizzes: 0,
+    aiCalibrations: 0,
+  });
 
-  const trendLabels = ["Quiz 1", "Quiz 2", "Quiz 3", "Quiz 4", "Quiz 5"];
-  const easyData = [40, 35, 30, 25, 20]; // Percentage of questions tagged easy
-  const mediumData = [45, 45, 50, 55, 60];
-  const hardData = [15, 20, 20, 20, 20];
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+      setError("");
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("aura_token") ?? undefined : undefined;
+
+      const result = await handleGetTeacherDashboardData(token);
+      if (!result.success) {
+        setError(result.error || "Failed to load analytics.");
+      } else {
+        setQuizzes(result.quizzes);
+        setScoreLabels(result.scoreLabels);
+        setScoreData(result.scoreData);
+        setTrendLabels(result.trendLabels);
+        setEasyData(result.easyData);
+        setMediumData(result.mediumData);
+        setHardData(result.hardData);
+        setStats(result.stats);
+      }
+      setIsLoading(false);
+    };
+
+    fetchDashboardData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#020617] p-6 lg:p-12">
@@ -34,19 +69,29 @@ export default function TeacherDashboard() {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard title="Total Students" value="142" icon={Users} color="text-sky-400" />
-          <StatCard title="Active Quizzes" value="8" icon={Activity} color="text-emerald-400" />
-          <StatCard title="AI Calibrations" value="1,204" icon={BrainCircuit} color="text-purple-400" />
+          <StatCard title="Total Students" value={String(stats.totalStudents)} icon={Users} color="text-sky-400" />
+          <StatCard title="Active Quizzes" value={String(stats.activeQuizzes)} icon={Activity} color="text-emerald-400" />
+          <StatCard title="AI Calibrations" value={String(stats.aiCalibrations)} icon={BrainCircuit} color="text-purple-400" />
         </div>
 
         {/* Analytics Charts */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-24 gap-3 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
+            <span>Loading teacher analytics...</span>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6"
           >
-            <ScoreDistributionChart labels={scoreLabels} data={scoreData} title="Latest Quiz Score Distribution" />
+            <ScoreDistributionChart
+              labels={scoreLabels.length ? scoreLabels : ["No attempts yet"]}
+              data={scoreData.length ? scoreData : [0]}
+              title="Score Distribution"
+            />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -62,27 +107,39 @@ export default function TeacherDashboard() {
             />
           </motion.div>
         </div>
+        )}
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
 
         {/* Recent Quizzes List */}
         <section>
           <h2 className="text-xl font-semibold text-white mb-4">Your Quizzes</h2>
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
             <div className="divide-y divide-slate-800/50">
-              {[1, 2, 3].map((_, i) => (
-                <div key={i} className="p-6 flex items-center justify-between hover:bg-slate-800/20 transition-colors">
+              {quizzes.map((quiz) => (
+                <div key={quiz.PK} className="p-6 flex items-center justify-between hover:bg-slate-800/20 transition-colors">
                   <div>
-                    <h3 className="text-lg font-medium text-slate-200">Introduction to Cloud Computing</h3>
+                    <h3 className="text-lg font-medium text-slate-200">{quiz.title}</h3>
                     <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
-                      <span>45 Minutes</span>
+                      <span>{quiz.timeLimitMinutes} Minutes</span>
                       <span>•</span>
-                      <span>20 Questions</span>
+                      <span>{quiz.questions.length} Questions</span>
                     </div>
                   </div>
-                  <button className="text-sky-400 font-medium hover:text-sky-300 transition-colors">
+                  <button className="text-sky-400 font-medium hover:text-sky-300 transition-colors cursor-not-allowed">
                     View Results
                   </button>
                 </div>
               ))}
+              {quizzes.length === 0 && (
+                <div className="p-8 text-center text-slate-500">
+                  No quizzes found yet. Create your first quiz to start seeing analytics.
+                </div>
+              )}
             </div>
           </div>
         </section>
