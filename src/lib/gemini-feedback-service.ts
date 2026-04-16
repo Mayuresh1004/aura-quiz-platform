@@ -7,12 +7,24 @@ function buildFallbackFeedback(attempt: Attempt): string {
     : 0;
 
   if (pct >= 80) {
-    return "Excellent work. You are consistently strong on this topic. Try a harder quiz to keep improving.";
+    return [
+      "Strength: Strong mastery of the core concepts.",
+      "Focus area: Keep practicing mixed-difficulty questions to avoid small mistakes.",
+      "Next step: Try a harder quiz and explain each correct answer in your own words.",
+    ].join("\n");
   }
   if (pct >= 60) {
-    return "Good effort. You have a solid base, but a few weak spots remain. Review incorrect questions and retry soon.";
+    return [
+      "Strength: You have a good foundation in this topic.",
+      "Focus area: A few concepts are still inconsistent under quiz pressure.",
+      "Next step: Review wrong questions one-by-one, then retake a similar quiz within 24 hours.",
+    ].join("\n");
   }
-  return "You are still building fundamentals in this topic. Revisit core concepts and practice with easier quizzes first.";
+  return [
+    "Strength: You attempted the full quiz and identified learning gaps.",
+    "Focus area: Core fundamentals need reinforcement.",
+    "Next step: Revisit basics, solve 5-10 easier practice questions, then retry this quiz.",
+  ].join("\n");
 }
 
 export async function generateAttemptFeedback(
@@ -47,9 +59,13 @@ You are an AI tutor for a quiz platform.
 Generate concise personalized feedback for a student.
 
 Rules:
-- Keep response under 120 words.
+- Keep response under 180 words.
 - Use plain text only.
-- Include: 1 strength, 1 weakness, and 1 next-step suggestion.
+- Use exactly this format (one line each):
+  Strength: ...
+  Focus area: ...
+  Next step: ...
+- Focus on specific misconceptions shown in wrong answers.
 - Tone: supportive and actionable.
 
 Quiz title: ${quiz.title}
@@ -73,8 +89,8 @@ ${JSON.stringify(wrongQuestionSummaries, null, 2)}
             },
           ],
           generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 220,
+            temperature: 0.35,
+            maxOutputTokens: 260,
           },
         }),
       }

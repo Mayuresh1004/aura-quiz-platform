@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Plus, Users, TrendingUp, Activity, Loader2, Search, ExternalLink } from "lucide-react";
+import { Plus, Users, TrendingUp, Activity, Loader2, Search, ExternalLink, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useMemo } from "react";
+import type { ComponentType } from "react";
 import {
   ScoreDistributionChart,
   DifficultyTrendLine,
@@ -11,8 +12,10 @@ import {
 } from "@/components/AnalyticsCharts";
 import { handleGetTeacherDashboardData } from "@/actions/server-actions";
 import { Quiz, Attempt } from "@/models/DatabaseInterfaces";
+import { useAuth } from "@/lib/auth-context";
 
 export default function TeacherDashboard() {
+  const { logout } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -39,7 +42,8 @@ export default function TeacherDashboard() {
 
       const result = await handleGetTeacherDashboardData(token);
       if (!result.success) {
-        setError((result as any).error || "Failed to load analytics.");
+        const errorMessage = "error" in result ? result.error : undefined;
+        setError(errorMessage || "Failed to load analytics.");
       } else {
         setQuizzes(result.quizzes);
         setAttempts(result.attempts);
@@ -81,13 +85,23 @@ export default function TeacherDashboard() {
             <h1 className="text-3xl font-bold text-white tracking-tight">Teacher Dashboard</h1>
             <p className="text-slate-400 mt-1">Manage quizzes and monitor student performance.</p>
           </div>
-          <Link
-            href="/teacher/quiz/create"
-            className="flex items-center gap-2 bg-sky-500 hover:bg-sky-400 text-white px-5 py-2.5 rounded-xl font-medium transition-colors w-max"
-          >
-            <Plus className="w-5 h-5" />
-            Create Quiz
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/teacher/quiz/create"
+              className="flex items-center gap-2 bg-sky-500 hover:bg-sky-400 text-white px-5 py-2.5 rounded-xl font-medium transition-colors w-max"
+            >
+              <Plus className="w-5 h-5" />
+              Create Quiz
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="flex items-center gap-2 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 px-4 py-2.5 rounded-xl font-medium transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </header>
 
         {/* Quick Stats */}
@@ -233,7 +247,7 @@ function StatCard({
 }: {
   title: string;
   value: string;
-  icon: any;
+  icon: ComponentType<{ className?: string }>;
   color: string;
 }) {
   return (

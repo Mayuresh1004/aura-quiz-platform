@@ -2,12 +2,13 @@
 
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
+import { Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, AlertTriangle, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { handleGetQuiz, handleQuizSubmission } from "@/actions/server-actions";
-import { Quiz } from "@/models/DatabaseInterfaces";
+import { handleGetQuiz, handleQuizSubmission, handleGetStudentQuizAnalysis } from "@/actions/server-actions";
+import { Attempt, Quiz } from "@/models/DatabaseInterfaces";
 import { useAuth } from "@/lib/auth-context";
+import { ScoreDistributionChart, QuestionFailureRateChart } from "@/components/AnalyticsCharts";
 
 export default function QuizAttempt() {
   const { id } = useParams();
@@ -25,6 +26,12 @@ export default function QuizAttempt() {
   const [score, setScore] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiFeedback, setAiFeedback] = useState("");
+  const [analysisAttempts, setAnalysisAttempts] = useState<Attempt[]>([]);
+  const [analysisAvgScore, setAnalysisAvgScore] = useState<number | null>(null);
+  const [analysisFailureRates, setAnalysisFailureRates] = useState<
+    { text: string; failureRate: number }[]
+  >([]);
+  const [analysisError, setAnalysisError] = useState("");
 
   // Fetch quiz from DynamoDB on mount
   useEffect(() => {
@@ -100,6 +107,23 @@ export default function QuizAttempt() {
     if (result.success && result.feedback) {
       setAiFeedback(result.feedback);
     }
+    if (result.success && result.analytics) {
+      setAnalysisAttempts(result.analytics.attempts);
+      setAnalysisAvgScore(result.analytics.avgScorePct);
+      setAnalysisFailureRates(result.analytics.failureRates);
+      setAnalysisError("");
+    } else if (quizId) {
+      // Fallback fetch in case analytics payload is missing.
+      const analysisResult = await handleGetStudentQuizAnalysis(quizId);
+      if (analysisResult.success) {
+        setAnalysisAttempts(analysisResult.attempts);
+        setAnalysisAvgScore(analysisResult.avgScorePct);
+        setAnalysisFailureRates(analysisResult.failureRates);
+        setAnalysisError("");
+      } else {
+        setAnalysisError(analysisResult.error || "Failed to load analysis.");
+      }
+    }
     setIsSubmitting(false);
   };
 
@@ -138,45 +162,104 @@ export default function QuizAttempt() {
   // --- Results screen ---
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#020617] p-6 lg:p-12">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-slate-900/50 border border-slate-800 p-8 rounded-3xl max-w-md w-full text-center"
+          className="max-w-5xl mx-auto space-y-6"
         >
-          <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto mb-6" />
-          <h2 className="text-3xl font-bold text-white mb-2">Quiz Completed!</h2>
-          <p className="text-slate-400 mb-8">
-            {isSubmitting
-              ? "Saving your results securely..."
-              : "Your results have been securely recorded."}
-          </p>
+          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-3xl text-center">
+            <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto mb-6" />
+            <h2 className="text-3xl font-bold text-white mb-2">Quiz Completed!</h2>
+            <p className="text-slate-400 mb-8">
+              {isSubmitting
+                ? "Saving your results securely..."
+                : "Your results have been securely recorded."}
+            </p>
 
-          <div className="bg-slate-950/50 p-6 rounded-2xl mb-8">
-            <p className="text-sm font-medium text-slate-400 mb-1">Final Score</p>
-            <p className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-sky-400">
-              {percentScore}%
-            </p>
-            <p className="text-sm text-slate-400 mt-2">
-              {score} out of {quiz.questions.length} correct
-            </p>
+            <div className="bg-slate-950/50 p-6 rounded-2xl mb-8">
+              <p className="text-sm font-medium text-slate-400 mb-1">Final Score</p>
+              <p className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-sky-400">
+                {percentScore}%
+              </p>
+              <p className="text-sm text-slate-400 mt-2">
+                {score} out of {quiz.questions.length} correct
+              </p>
+              {analysisAvgScore !== null && (
+                <p className="text-sm mt-3 text-slate-300">
+                  Class average:{" "}
+                  <span className={analysisAvgScore >= 60 ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+                    {analysisAvgScore}%
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {!!aiFeedback && (
+              <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl mb-8 text-left">
+                <p className="text-xs uppercase tracking-wider text-sky-400 mb-2">
+                  AI Feedback
+                </p>
+                <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{aiFeedback}</p>
+              </div>
+            )}
+
+            <Link
+              href="/student/dashboard"
+              className="block w-full bg-sky-500 hover:bg-sky-400 text-white font-semibold py-3 rounded-xl transition-colors"
+            >
+              Return to Dashboard
+            </Link>
           </div>
 
-          {!!aiFeedback && (
-            <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-2xl mb-8 text-left">
-              <p className="text-xs uppercase tracking-wider text-sky-400 mb-2">
-                AI Feedback
-              </p>
-              <p className="text-sm text-slate-300 leading-relaxed">{aiFeedback}</p>
+          <section className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-sky-400" />
+              <h3 className="text-xl font-semibold text-white">Quiz Analysis</h3>
             </div>
-          )}
+            <p className="text-sm text-slate-400 mb-6">
+              Compare your attempt to class performance and identify the hardest questions.
+            </p>
 
-          <Link
-            href="/student/dashboard"
-            className="block w-full bg-sky-500 hover:bg-sky-400 text-white font-semibold py-3 rounded-xl transition-colors"
-          >
-            Return to Dashboard
-          </Link>
+            {analysisError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300 mb-4">
+                {analysisError}
+              </div>
+            )}
+
+            {!analysisError && (
+              <div className="space-y-6">
+                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
+                  <h4 className="text-base font-semibold text-slate-100 mb-4">Your Score vs Class Average</h4>
+                  <div className="space-y-4">
+                    <ScoreCompareBar
+                      label="Your Score"
+                      value={percentScore}
+                      colorClass={percentScore >= 60 ? "bg-emerald-500" : "bg-red-500"}
+                    />
+                    <ScoreCompareBar
+                      label="Class Average"
+                      value={analysisAvgScore ?? 0}
+                      colorClass={(analysisAvgScore ?? 0) >= 60 ? "bg-sky-500" : "bg-amber-500"}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
+                  <ScoreDistributionChart
+                    allAttempts={analysisAttempts.map((a) => ({ ...a, quizTitle: quiz.title }))}
+                    quizzes={[quiz]}
+                  />
+                  </div>
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
+                    <h4 className="text-base font-semibold text-slate-100 mb-3">Question Difficulty (by class misses)</h4>
+                    <QuestionFailureRateChart questions={analysisFailureRates} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
         </motion.div>
       </div>
     );
@@ -282,6 +365,32 @@ export default function QuizAttempt() {
             )}
           </div>
         </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreCompareBar({
+  label,
+  value,
+  colorClass,
+}: {
+  label: string;
+  value: number;
+  colorClass: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm mb-1.5">
+        <span className="text-slate-300">{label}</span>
+        <span className="text-white font-semibold">{clamped}%</span>
+      </div>
+      <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${colorClass}`}
+          style={{ width: `${clamped}%` }}
+        />
       </div>
     </div>
   );

@@ -36,6 +36,17 @@ function extractUserIdFromToken(token: string): string {
   }
 }
 
+function buildQuestionFailureRates(quiz: Quiz, attempts: Attempt[]) {
+  return quiz.questions.map((question, idx) => {
+    const answered = attempts.filter((a) => a.responses[idx] !== undefined);
+    const wrong = answered.filter((a) => a.responses[idx] !== question.correctOptionIndex);
+    return {
+      text: question.text,
+      failureRate: answered.length > 0 ? wrong.length / answered.length : 0,
+    };
+  });
+}
+
 /**
  * Registers a user in Cognito AND saves a User metadata record to DynamoDB
  * (including the selected role) so that the platform can authorise them correctly.
@@ -176,7 +187,15 @@ export async function handleQuizSubmission(attempt: Attempt) {
 
     if (!quiz || quiz.questions.length === 0) {
       // Attempt saved; skip AI update if quiz metadata is unavailable.
-      return { success: true, feedback: aiFeedback };
+      return {
+        success: true,
+        feedback: aiFeedback,
+        analytics: {
+          attempts: [] as Attempt[],
+          avgScorePct: 0,
+          failureRates: [] as { text: string; failureRate: number }[],
+        },
+      };
     }
 
     // 3. AI Difficulty Estimation Loop:
@@ -213,7 +232,29 @@ export async function handleQuizSubmission(attempt: Attempt) {
       await updateAttemptFeedback(attempt.PK, attempt.SK, aiFeedback);
     }
 
-    return { success: true, feedback: aiFeedback };
+    const allAttempts = await listAllAttempts();
+    const quizAttempts = allAttempts.filter((a) => a.quizId === quizId);
+    const avgScorePct =
+      quizAttempts.length > 0
+        ? parseFloat(
+            (
+              quizAttempts.reduce(
+                (sum, a) => sum + (a.totalQuestions ? (a.score / a.totalQuestions) * 100 : 0),
+                0
+              ) / quizAttempts.length
+            ).toFixed(1)
+          )
+        : 0;
+
+    return {
+      success: true,
+      feedback: aiFeedback,
+      analytics: {
+        attempts: quizAttempts,
+        avgScorePct,
+        failureRates: buildQuestionFailureRates(quiz, quizAttempts),
+      },
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -374,19 +415,7 @@ export async function handleGetQuizResults(quizId: string, accessToken?: string)
     const allAttempts = await listAllAttempts();
     const quizAttempts = allAttempts.filter((a) => a.quizId === quizId);
 
-    // Compute per-question failure rates
-    const failureRates: { text: string; failureRate: number }[] = quiz.questions.map(
-      (question, idx) => {
-        const answered = quizAttempts.filter((a) => a.responses[idx] !== undefined);
-        const wrong = answered.filter(
-          (a) => a.responses[idx] !== question.correctOptionIndex
-        );
-        return {
-          text: question.text,
-          failureRate: answered.length > 0 ? wrong.length / answered.length : 0,
-        };
-      }
-    );
+    const failureRates = buildQuestionFailureRates(quiz, quizAttempts);
 
     return {
       success: true,
@@ -396,5 +425,41 @@ export async function handleGetQuizResults(quizId: string, accessToken?: string)
     };
   } catch (err: any) {
     return { success: false, error: err.message, attempts: [], quiz: null, failureRates: [] };
+  }
+}
+
+/**
+ * Fetches analytics for a single quiz after student submission.
+ * Returns class average and question-level failure rates for charting.
+ */
+export async function handleGetStudentQuizAnalysis(quizId: string) {
+  try {
+    const quiz = await getQuiz(quizId);
+    if (!quiz) {
+      return { success: false, error: "Quiz not found.", attempts: [], avgScorePct: 0, failureRates: [] };
+    }
+
+    const allAttempts = await listAllAttempts();
+    const quizAttempts = allAttempts.filter((a) => a.quizId === quizId);
+    const avgScorePct =
+      quizAttempts.length > 0
+        ? parseFloat(
+            (
+              quizAttempts.reduce(
+                (sum, a) => sum + (a.totalQuestions ? (a.score / a.totalQuestions) * 100 : 0),
+                0
+              ) / quizAttempts.length
+            ).toFixed(1)
+          )
+        : 0;
+
+    return {
+      success: true,
+      attempts: quizAttempts,
+      avgScorePct,
+      failureRates: buildQuestionFailureRates(quiz, quizAttempts),
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message, attempts: [], avgScorePct: 0, failureRates: [] };
   }
 }

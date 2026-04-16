@@ -1,15 +1,29 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { PlayCircle, Clock, CheckCircle, Loader2, Search, ChevronDown, ChevronUp, MessageSquareText, Calendar } from "lucide-react";
+import {
+  PlayCircle,
+  Clock,
+  CheckCircle,
+  Loader2,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  MessageSquareText,
+  Calendar,
+  LogOut,
+  Target,
+  Timer,
+} from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
+import type { ComponentType } from "react";
 import { handleListQuizzes, handleListStudentAttempts } from "@/actions/server-actions";
 import { useAuth } from "@/lib/auth-context";
 import { Quiz, Attempt } from "@/models/DatabaseInterfaces";
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<"AVAILABLE" | "COMPLETED">("AVAILABLE");
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
@@ -81,15 +95,70 @@ export default function StudentDashboard() {
     [displayList, search]
   );
 
+  const stats = useMemo(() => {
+    const completedCount = completedQuizIds.size;
+    const bestAttempts = Object.values(bestAttemptByQuiz);
+    const averageBestScore =
+      bestAttempts.length > 0
+        ? Math.round(
+            bestAttempts.reduce((sum, attempt) => {
+              if (!attempt.totalQuestions) return sum;
+              return sum + (attempt.score / attempt.totalQuestions) * 100;
+            }, 0) / bestAttempts.length
+          )
+        : 0;
+    const upcomingDueCount = availableQuizzes.filter(
+      (quiz) => quiz.dueAt && new Date(quiz.dueAt) >= new Date()
+    ).length;
+
+    return {
+      completedCount,
+      averageBestScore,
+      upcomingDueCount,
+    };
+  }, [availableQuizzes, bestAttemptByQuiz, completedQuizIds.size]);
+
   return (
     <div className="min-h-screen bg-[#020617] p-6 lg:p-12">
       <div className="max-w-5xl mx-auto space-y-8">
-        <header>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Student Dashboard</h1>
-          <p className="text-slate-400 mt-1">
-            {user ? `Welcome back, ${user.email.split("@")[0]}!` : "Ready to test your knowledge?"}
-          </p>
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Student Dashboard</h1>
+            <p className="text-slate-400 mt-1">
+              {user ? `Welcome back, ${user.email.split("@")[0]}!` : "Ready to test your knowledge?"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="flex items-center gap-2 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 px-4 py-2.5 rounded-xl font-medium transition-colors w-max"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
         </header>
+
+        {/* Quick progress stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StudentStatCard
+            title="Completed Quizzes"
+            value={String(stats.completedCount)}
+            icon={CheckCircle}
+            color="text-emerald-400"
+          />
+          <StudentStatCard
+            title="Avg Best Score"
+            value={stats.completedCount > 0 ? `${stats.averageBestScore}%` : "—"}
+            icon={Target}
+            color={stats.averageBestScore >= 60 ? "text-sky-400" : "text-amber-400"}
+          />
+          <StudentStatCard
+            title="Upcoming Deadlines"
+            value={String(stats.upcomingDueCount)}
+            icon={Timer}
+            color="text-amber-400"
+          />
+        </div>
 
         {/* Search */}
         <div className="relative">
@@ -338,5 +407,29 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+function StudentStatCard({
+  title,
+  value,
+  icon: Icon,
+  color,
+}: {
+  title: string;
+  value: string;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+}) {
+  return (
+    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+      <div className={`p-2.5 rounded-xl bg-slate-800 ${color}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div>
+        <p className="text-xs text-slate-400">{title}</p>
+        <p className="text-xl font-bold text-white">{value}</p>
+      </div>
+    </div>
   );
 }
