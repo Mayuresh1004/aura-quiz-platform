@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 import { Role } from "../models/DatabaseInterfaces";
 
 interface User {
@@ -20,10 +20,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function base64UrlDecodeToString(input: string): string {
+  // JWT parts are base64url (RFC 7515): '-' and '_' instead of '+' and '/' and may omit padding.
+  const padded = input.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(input.length / 4) * 4, "=");
+  return atob(padded);
+}
+
 function extractUserIdFromToken(token: string): string | undefined {
   try {
     const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload));
+    if (!payload) return undefined;
+    const decoded = JSON.parse(base64UrlDecodeToString(payload));
     return decoded.sub as string | undefined;
   } catch {
     return undefined;
@@ -31,22 +38,18 @@ function extractUserIdFromToken(token: string): string | undefined {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // On mount, check if user session exists in localStorage (or via Cognito refresh token)
-    const storedUser =
-      localStorage.getItem("quickquiz_user") || localStorage.getItem("aura_user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse stored user", e);
-      }
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === "undefined") return null;
+    const storedUser = localStorage.getItem("quickquiz_user") || localStorage.getItem("aura_user");
+    if (!storedUser) return null;
+    try {
+      return JSON.parse(storedUser) as User;
+    } catch (e) {
+      console.error("Failed to parse stored user", e);
+      return null;
     }
-    setIsLoading(false);
-  }, []);
+  });
+  const isLoading = false;
 
   const login = (token: string, userData: User) => {
     // In a real app we'd also store the token securely, e.g., HTTP-only cookie
@@ -57,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     localStorage.setItem("quickquiz_token", token);
     localStorage.setItem("quickquiz_user", JSON.stringify(resolvedUser));
+    // Keep legacy keys for backwards compatibility with older builds.
+    localStorage.setItem("aura_token", token);
+    localStorage.setItem("aura_user", JSON.stringify(resolvedUser));
     setUser(resolvedUser);
   };
 

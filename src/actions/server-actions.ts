@@ -26,7 +26,10 @@ import { DYNAMO_TABLE_NAME } from "../lib/config";
 function extractUserIdFromToken(token: string): string {
   try {
     const payload = token.split(".")[1];
-    const decoded = JSON.parse(Buffer.from(payload, "base64").toString("utf-8"));
+    if (!payload) return "";
+    // JWT uses base64url, not base64.
+    const padded = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const decoded = JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
     return decoded.sub as string;
   } catch {
     return "";

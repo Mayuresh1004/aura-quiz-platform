@@ -3,17 +3,16 @@
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Users, BarChart2, Clock } from "lucide-react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { handleGetQuizResults } from "@/actions/server-actions";
 import { ScoreDistributionChart, QuestionFailureRateChart } from "@/components/AnalyticsCharts";
 import { Attempt, Quiz } from "@/models/DatabaseInterfaces";
+import type { ComponentType } from "react";
 
-interface PageProps {
-  params: { quizId: string };
-}
-
-export default function QuizResultsPage({ params }: PageProps) {
-  const { quizId } = params;
+export default function QuizResultsPage() {
+  const params = useParams<{ quizId: string }>();
+  const quizId = params?.quizId;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -23,9 +22,12 @@ export default function QuizResultsPage({ params }: PageProps) {
 
   useEffect(() => {
     const load = async () => {
+      if (!quizId) return;
       setIsLoading(true);
       const token =
-        typeof window !== "undefined" ? localStorage.getItem("quickquiz_token") ?? undefined : undefined;
+        typeof window !== "undefined"
+          ? localStorage.getItem("quickquiz_token") ?? localStorage.getItem("aura_token") ?? undefined
+          : undefined;
       const result = await handleGetQuizResults(quizId, token);
       if (!result.success || !result.quiz) {
         setError(result.error || "Failed to load quiz results.");
@@ -244,7 +246,7 @@ function SummaryCard({
 }: {
   title: string;
   value: string;
-  icon: any;
+  icon: ComponentType<{ className?: string }>;
   color: string;
 }) {
   return (
