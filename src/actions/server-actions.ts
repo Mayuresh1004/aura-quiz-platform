@@ -258,23 +258,23 @@ export async function handleListStudentAttempts(studentId: string) {
 
 /**
  * Computes teacher dashboard analytics from live DynamoDB quiz/attempt data.
+ * Returns the full attempts array so the client can filter by quiz, plus
+ * per-quiz avg scores and a pass rate stat.
  */
 export async function handleGetTeacherDashboardData(accessToken?: string) {
+  const empty = {
+    success: false,
+    quizzes: [] as Quiz[],
+    attempts: [] as Attempt[],
+    trendLabels: [] as string[],
+    easyData: [] as number[],
+    mediumData: [] as number[],
+    hardData: [] as number[],
+    stats: { totalStudents: 0, activeQuizzes: 0, avgPassRate: 0 },
+  };
+
   try {
-    if (!accessToken) {
-      return {
-        success: false,
-        error: "Authentication required.",
-        quizzes: [],
-        scoreLabels: [],
-        scoreData: [],
-        trendLabels: [],
-        easyData: [],
-        mediumData: [],
-        hardData: [],
-        stats: { totalStudents: 0, activeQuizzes: 0, aiCalibrations: 0 },
-      };
-    }
+    if (!accessToken) return { ...empty, error: "Authentication required." };
 
     const teacherId = extractUserIdFromToken(accessToken);
     const allQuizzes = await listQuizzes();
@@ -286,65 +286,58 @@ export async function handleGetTeacherDashboardData(accessToken?: string) {
     const teacherQuizIds = new Set(teacherQuizzes.map((q) => q.PK.split("#")[1]));
     const attempts = allAttempts.filter((a) => teacherQuizIds.has(a.quizId));
 
-    const scoreBuckets = [0, 0, 0, 0, 0];
-    for (const attempt of attempts) {
-      if (!attempt.totalQuestions) continue;
-      const percent = Math.round((attempt.score / attempt.totalQuestions) * 100);
-      if (percent <= 20) scoreBuckets[0]++;
-      else if (percent <= 40) scoreBuckets[1]++;
-      else if (percent <= 60) scoreBuckets[2]++;
-      else if (percent <= 80) scoreBuckets[3]++;
-      else scoreBuckets[4]++;
-    }
-
-    const latestQuizzes = [...teacherQuizzes]
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-      .slice(0, 5)
-      .reverse();
-
-    const trendLabels = latestQuizzes.map(
-      (q, idx) => q.title || `Quiz ${idx + 1}`
+    // Denormalize quiz title onto each attempt for tooltip display
+    const quizTitleMap = Object.fromEntries(
+      teacherQuizzes.map((q) => [q.PK.split("#")[1], q.title])
     );
+    const attemptsWithTitles: Attempt[] = attempts.map((a) => ({
+      ...a,
+      quizTitle: quizTitleMap[a.quizId] ?? a.quizId,
+    }));
 
-    const easyData = latestQuizzes.map((q) =>
+    // Difficulty trend — all quizzes, client slices to desired count
+    const sortedQuizzes = [...teacherQuizzes].sort((a, b) =>
+      a.createdAt < b.createdAt ? -1 : 1
+    );
+    const trendLabels = sortedQuizzes.map((q, i) => q.title || `Quiz ${i + 1}`);
+    const easyData = sortedQuizzes.map((q) =>
       q.questions.length
         ? Math.round(
             (q.questions.filter((ques) => ques.difficulty === "EASY").length /
-              q.questions.length) *
-              100
+              q.questions.length) * 100
           )
         : 0
     );
-    const mediumData = latestQuizzes.map((q) =>
+    const mediumData = sortedQuizzes.map((q) =>
       q.questions.length
         ? Math.round(
             (q.questions.filter((ques) => ques.difficulty === "MEDIUM").length /
-              q.questions.length) *
-              100
+              q.questions.length) * 100
           )
         : 0
     );
-    const hardData = latestQuizzes.map((q) =>
+    const hardData = sortedQuizzes.map((q) =>
       q.questions.length
         ? Math.round(
             (q.questions.filter((ques) => ques.difficulty === "HARD").length /
-              q.questions.length) *
-              100
+              q.questions.length) * 100
           )
         : 0
     );
 
     const uniqueStudents = new Set(attempts.map((a) => a.PK));
-    const aiCalibrations = attempts.reduce(
-      (sum, attempt) => sum + (attempt.totalQuestions || 0),
-      0
+    const passingAttempts = attempts.filter(
+      (a) => a.totalQuestions && (a.score / a.totalQuestions) >= 0.6
     );
+    const avgPassRate =
+      attempts.length > 0
+        ? Math.round((passingAttempts.length / attempts.length) * 100)
+        : 0;
 
     return {
       success: true,
       quizzes: teacherQuizzes.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-      scoreLabels: ["0-20%", "21-40%", "41-60%", "61-80%", "81-100%"],
-      scoreData: scoreBuckets,
+      attempts: attemptsWithTitles,
       trendLabels,
       easyData,
       mediumData,
@@ -352,21 +345,53 @@ export async function handleGetTeacherDashboardData(accessToken?: string) {
       stats: {
         totalStudents: uniqueStudents.size,
         activeQuizzes: teacherQuizzes.length,
-        aiCalibrations,
+        avgPassRate,
       },
     };
   } catch (err: any) {
+    return { ...empty, error: err.message };
+  }
+}
+
+/**
+ * Fetches all attempts for a specific quiz plus question-level failure rates.
+ * Used by the per-quiz results drill-down page.
+ */
+export async function handleGetQuizResults(quizId: string, accessToken?: string) {
+  try {
+    if (!accessToken) {
+      return { success: false, error: "Authentication required.", attempts: [], quiz: null, failureRates: [] };
+    }
+
+    const quiz = await getQuiz(quizId);
+    if (!quiz) {
+      return { success: false, error: "Quiz not found.", attempts: [], quiz: null, failureRates: [] };
+    }
+
+    const allAttempts = await listAllAttempts();
+    const quizAttempts = allAttempts.filter((a) => a.quizId === quizId);
+
+    // Compute per-question failure rates
+    const failureRates: { text: string; failureRate: number }[] = quiz.questions.map(
+      (question, idx) => {
+        const answered = quizAttempts.filter((a) => a.responses[idx] !== undefined);
+        const wrong = answered.filter(
+          (a) => a.responses[idx] !== question.correctOptionIndex
+        );
+        return {
+          text: question.text,
+          failureRate: answered.length > 0 ? wrong.length / answered.length : 0,
+        };
+      }
+    );
+
     return {
-      success: false,
-      error: err.message,
-      quizzes: [],
-      scoreLabels: [],
-      scoreData: [],
-      trendLabels: [],
-      easyData: [],
-      mediumData: [],
-      hardData: [],
-      stats: { totalStudents: 0, activeQuizzes: 0, aiCalibrations: 0 },
+      success: true,
+      quiz,
+      attempts: quizAttempts,
+      failureRates,
     };
+  } catch (err: any) {
+    return { success: false, error: err.message, attempts: [], quiz: null, failureRates: [] };
   }
 }

@@ -29,12 +29,14 @@ export interface Quiz {
   questions: Question[]; // Embedded to save read capacity units
   createdAt: string;
   teacherId: string; // USER#<id>
+  dueAt?: string; // Optional ISO deadline timestamp
 }
 
 export interface Attempt {
   PK: string; // USER#<studentId>
   SK: string; // ATTEMPT#<quizId>#<timestamp>
   quizId: string;
+  quizTitle?: string; // Denormalized for display without an extra fetch
   score: number;
   totalQuestions: number;
   responses: number[]; // Index of the option selected for each question

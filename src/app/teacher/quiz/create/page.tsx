@@ -12,6 +12,7 @@ export default function CreateQuiz() {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [timeLimit, setTimeLimit] = useState(30);
+  const [dueAt, setDueAt] = useState("");
   const [questions, setQuestions] = useState<Question[]>([
     { id: uuidv4(), text: "", options: ["", "", "", ""], correctOptionIndex: 0, difficulty: "MEDIUM" },
   ]);
@@ -63,6 +64,7 @@ export default function CreateQuiz() {
         subject,
         timeLimitMinutes: timeLimit,
         questions,
+        dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
       },
       accessToken
     );
@@ -118,16 +120,29 @@ export default function CreateQuiz() {
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Time Limit (Minutes)</label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={timeLimit}
-                onChange={(e) => setTimeLimit(Number(e.target.value))}
-                className="w-full max-w-[200px] bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-sky-500/50"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Time Limit (Minutes)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(Number(e.target.value))}
+                  className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-sky-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Due Date <span className="text-slate-500 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={dueAt}
+                  onChange={(e) => setDueAt(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-sky-500/50 [color-scheme:dark]"
+                />
+              </div>
             </div>
           </div>
 
