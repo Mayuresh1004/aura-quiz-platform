@@ -7,9 +7,7 @@ import {
   CheckCircle,
   Loader2,
   Search,
-  ChevronDown,
-  ChevronUp,
-  MessageSquareText,
+  ChevronRight,
   Calendar,
   LogOut,
   Target,
@@ -18,19 +16,19 @@ import {
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import type { ComponentType } from "react";
+import { useRouter } from "next/navigation";
 import { handleListQuizzes, handleListStudentAttempts } from "@/actions/server-actions";
 import { useAuth } from "@/lib/auth-context";
 import { Quiz, Attempt } from "@/models/DatabaseInterfaces";
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"AVAILABLE" | "COMPLETED">("AVAILABLE");
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [expandedAttemptHistory, setExpandedAttemptHistory] = useState<string | null>(null);
-  const [expandedFeedback, setExpandedFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -201,11 +199,9 @@ export default function StudentDashboard() {
             {filteredList.map((quiz, i) => {
               const quizId = quiz.PK.split("#")[1];
               const bestAttempt = bestAttemptByQuiz[quizId];
-              const allAttempts = attemptsByQuiz[quizId] || [];
               const bestPct = bestAttempt
                 ? Math.round((bestAttempt.score / bestAttempt.totalQuestions) * 100)
                 : null;
-              const isHistoryExpanded = expandedAttemptHistory === quizId;
 
               return (
                 <motion.div
@@ -213,7 +209,16 @@ export default function StudentDashboard() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.07 }}
-                  className="bg-slate-900/40 border border-slate-800 rounded-2xl hover:border-slate-700 transition-colors"
+                  onClick={() => {
+                    if (activeTab === "COMPLETED") {
+                      router.push(`/student/quiz/${quizId}/analysis`);
+                    }
+                  }}
+                  className={`bg-slate-900/40 border border-slate-800 rounded-2xl transition-colors ${
+                    activeTab === "COMPLETED"
+                      ? "hover:border-sky-500/50 cursor-pointer"
+                      : "hover:border-slate-700"
+                  }`}
                 >
                   {/* Main quiz row */}
                   <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -270,83 +275,12 @@ export default function StudentDashboard() {
                     )}
                   </div>
 
-                  {/* Attempt history (Completed tab only) */}
                   {activeTab === "COMPLETED" && (
-                    <div className="border-t border-slate-800/70">
-                      <button
-                        onClick={() =>
-                          setExpandedAttemptHistory(isHistoryExpanded ? null : quizId)
-                        }
-                        className="w-full flex items-center justify-between px-6 py-3 text-xs text-slate-400 hover:text-slate-300 transition-colors"
-                      >
-                        <span>
-                          {allAttempts.length} attempt{allAttempts.length !== 1 ? "s" : ""} — view history
-                        </span>
-                        {isHistoryExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-
-                      {isHistoryExpanded && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          className="px-6 pb-4 space-y-3"
-                        >
-                          {allAttempts.map((attempt) => {
-                            const pct = attempt.totalQuestions
-                              ? Math.round((attempt.score / attempt.totalQuestions) * 100)
-                              : 0;
-                            const isFeedbackOpen = expandedFeedback === attempt.SK;
-                            return (
-                              <div
-                                key={attempt.SK}
-                                className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/50"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <span
-                                      className={`text-lg font-bold ${
-                                        pct >= 60 ? "text-emerald-400" : "text-red-400"
-                                      }`}
-                                    >
-                                      {pct}%
-                                    </span>
-                                    <span className="text-slate-400">
-                                      {attempt.score}/{attempt.totalQuestions} correct
-                                    </span>
-                                    <span className="text-slate-600 text-xs">
-                                      {new Date(attempt.completedAt).toLocaleString()}
-                                    </span>
-                                  </div>
-                                  {attempt.aiFeedback && (
-                                    <button
-                                      onClick={() =>
-                                        setExpandedFeedback(isFeedbackOpen ? null : attempt.SK)
-                                      }
-                                      className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors"
-                                    >
-                                      <MessageSquareText className="w-3.5 h-3.5" />
-                                      {isFeedbackOpen ? "Hide" : "AI Feedback"}
-                                    </button>
-                                  )}
-                                </div>
-                                {isFeedbackOpen && attempt.aiFeedback && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    className="mt-3 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg text-xs text-slate-300 leading-relaxed whitespace-pre-wrap"
-                                  >
-                                    {attempt.aiFeedback}
-                                  </motion.div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </motion.div>
-                      )}
+                    <div className="border-t border-slate-800/70 px-6 py-3 flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Click this quiz to view full analysis and feedback</span>
+                      <span className="text-sky-400 font-medium flex items-center gap-1">
+                        View Analysis <ChevronRight className="w-3.5 h-3.5" />
+                      </span>
                     </div>
                   )}
                 </motion.div>
